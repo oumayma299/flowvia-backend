@@ -1,0 +1,47 @@
+# Dossiers node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Fichiers environnement
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs
+*.log
+
+# Dossier build / dist
+dist/
+build/
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# IDE / éditeurs
+.vscode/
+.idea/
+
+# Coverage (tests)
+coverage/
+
+# Fichiers temporaires
+tmp/
+temp/
+
+# Cache
+.cache/
+
+# Fichiers de process
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# OS
+*.swp.env 
