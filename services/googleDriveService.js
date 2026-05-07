@@ -1,96 +1,79 @@
-const { google } = require('googleapis');
-const stream = require('stream');
-const path = require('path');
+const { v2: cloudinary } = require('cloudinary');
+const { Readable } = require('stream');
 
 // These should be in your .env file
-// GOOGLE_DRIVE_CLIENT_ID
-// GOOGLE_DRIVE_CLIENT_SECRET
-// GOOGLE_DRIVE_REDIRECT_URI
-// GOOGLE_DRIVE_REFRESH_TOKEN
-// GOOGLE_DRIVE_FOLDER_ID (Optional: ID of the folder where you want to save videos)
+// CLOUDINARY_CLOUD_NAME
+// CLOUDINARY_API_KEY
+// CLOUDINARY_API_SECRET
+// CLOUDINARY_FOLDER (optional)
 
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_DRIVE_CLIENT_ID,
-  process.env.GOOGLE_DRIVE_CLIENT_SECRET,
-  process.env.GOOGLE_DRIVE_REDIRECT_URI
-);
-
-oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_DRIVE_REFRESH_TOKEN });
-
-const drive = google.drive({
-  version: 'v3',
-  auth: oauth2Client,
-});
+if (process.env.CLOUDINARY_URL) {
+  cloudinary.config({
+    secure: true,
+  });
+} else {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+    secure: true,
+  });
+}
 
 /**
- * Uploads a file to Google Drive
+ * Uploads a file to Cloudinary
  * @param {Object} file - The file object from multer (memoryStorage)
- * @returns {Promise<string>} - The webViewLink or id of the uploaded file
+ * @returns {Promise<string>} - Secure URL of the uploaded file
  */
-const uploadVideoToDrive = async (file) => {
+const uploadVideoToCloudinary = async (file) => {
   try {
-    const bufferStream = new stream.PassThrough();
-    bufferStream.end(file.buffer);
+    const uploadResult = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream({
+        resource_type: 'video',
+        folder: process.env.CLOUDINARY_FOLDER || undefined,
+        use_filename: true,
+        unique_filename: true,
+      }, (error, result) => {
+        if (error) return reject(error);
+        resolve(result);
+      });
 
-    const response = await drive.files.create({
-      requestBody: {
-        name: `${Date.now()}-${file.originalname}`,
-        mimeType: file.mimetype,
-        parents: process.env.GOOGLE_DRIVE_FOLDER_ID ? [process.env.GOOGLE_DRIVE_FOLDER_ID] : [],
-      },
-      media: {
-        mimeType: file.mimetype,
-        body: bufferStream,
-      },
+      Readable.from(file.buffer).pipe(uploadStream);
     });
 
-    const fileId = response.data.id;
-
-    // Make the file publicly viewable (optional, but necessary if you want patients to see it)
-    await drive.permissions.create({
-      fileId: fileId,
-      requestBody: {
-        role: 'reader',
-        type: 'anyone',
-      },
-    });
-
-    // Get the webViewLink
-    const result = await drive.files.get({
-      fileId: fileId,
-      fields: 'webViewLink, webContentLink',
-    });
-
-    return result.data.webViewLink;
+    return uploadResult.secure_url;
   } catch (error) {
-    console.error('Error uploading to Google Drive:', error);
+    console.error('Error uploading to Cloudinary:', error);
     throw error;
   }
 };
 
 /**
- * Deletes a file from Google Drive
- * @param {string} fileLink - The link of the file to delete
+ * Deletes a video from Cloudinary
+ * @param {string} fileLink - Public URL of the uploaded file
  */
-const deleteVideoFromDrive = async (fileLink) => {
+const deleteVideoFromCloudinary = async (fileLink) => {
   try {
-    // Extract file ID from link
-    // Example: https://drive.google.com/file/d/FILE_ID/view?usp=drivesdk
-    const match = fileLink.match(/\/d\/(.+)\//);
-    const fileId = match ? match[1] : null;
+    if (!fileLink || !String(fileLink).includes('res.cloudinary.com')) return;
 
-    if (fileId) {
-      await drive.files.delete({
-        fileId: fileId,
-      });
-    }
+    const parsed = new URL(fileLink);
+    const uploadIndex = parsed.pathname.indexOf('/upload/');
+    if (uploadIndex === -1) return;
+
+    let publicPath = parsed.pathname.slice(uploadIndex + '/upload/'.length);
+    publicPath = publicPath.replace(/^v\d+\//, '');
+    publicPath = decodeURIComponent(publicPath).replace(/\.[^/.?]+$/, '');
+
+    if (!publicPath) return;
+
+    await cloudinary.uploader.destroy(publicPath, { resource_type: 'video' });
   } catch (error) {
-    console.error('Error deleting from Google Drive:', error);
+    console.error('Error deleting from Cloudinary:', error);
     // Don't throw to avoid blocking the main flow
   }
 };
 
 module.exports = {
-  uploadVideoToDrive,
-  deleteVideoFromDrive,
+  uploadVideoToCloudinary,
+  deleteVideoFromCloudinary,
 };

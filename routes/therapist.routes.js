@@ -12,7 +12,7 @@ const { initGridFS } = require('../models/gridfs');
 const mongoose = require('mongoose');
 const { isValidObjectId } = mongoose;
 const { ObjectId } = require('mongodb');
-const { uploadVideoToDrive, deleteVideoFromDrive } = require('../services/googleDriveService');
+const { uploadVideoToCloudinary, deleteVideoFromCloudinary } = require('../services/googleDriveService');
 
 function extractVideoId(videoPath = '') {
   const match = String(videoPath).match(/\/api\/therapist\/video\/([a-fA-F0-9]{24})$/);
@@ -38,9 +38,9 @@ async function deleteVideo(videoPath) {
     return;
   }
 
-  // If it's a Google Drive link
-  if (videoPath.includes('drive.google.com')) {
-    await deleteVideoFromDrive(videoPath);
+  // If it's a Cloudinary URL
+  if (videoPath.includes('res.cloudinary.com')) {
+    await deleteVideoFromCloudinary(videoPath);
   }
 }
 
@@ -102,7 +102,7 @@ router.post('/sessions', upload.any(), async (req, res) => {
       return res.status(400).json({ message: 'Ajoutez au moins un exercice.' });
     }
 
-    // Upload videos to Google Drive
+    // Upload videos to Cloudinary
     const exercisePromises = exercises.map(async (ex, i) => {
       const cleanExerciseTitle = String(ex.title ?? '').trim();
       const duration = Number(ex.duration);
@@ -115,8 +115,8 @@ router.post('/sessions', upload.any(), async (req, res) => {
       let videoPath = ex.videoPath || ex.videoUrl || '';
 
       if (file) {
-        // Upload to Google Drive
-        videoPath = await uploadVideoToDrive(file);
+        // Upload to Cloudinary
+        videoPath = await uploadVideoToCloudinary(file);
       }
       return {
         title: cleanExerciseTitle,
@@ -223,7 +223,7 @@ router.put('/sessions/:id', upload.any(), async (req, res) => {
       let videoPath = ex.videoPath || ex.videoUrl || '';
 
       if (file) {
-        videoPath = await uploadVideoToDrive(file);
+        videoPath = await uploadVideoToCloudinary(file);
       }
       return {
         title: cleanExerciseTitle,
